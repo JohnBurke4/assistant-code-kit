@@ -1,0 +1,64 @@
+name: workbench-launch
+on:
+  # The push run, which the guard skips, registers the workflow on this branch.
+  push:
+    branches: ["__INTEGRATION__"]
+    paths: [.github/workflows/workbench-launch.yml]
+  workflow_dispatch:
+    inputs:
+      repo: { required: true, type: string }
+      issue: { required: true, type: string }
+      options: { required: true, type: string }
+      head: { required: true, type: string }
+      run_id: { required: false, type: string }
+      run_key: { required: false, type: string }
+permissions: {}
+jobs:
+  fire:
+    # Guard before the environment's secrets: only a dispatch, only by the App, only on the integration branch.
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/__INTEGRATION__' && github.actor_id == '__APP_BOT_ID__' && github.triggering_actor == '__APP_SLUG__[bot]'
+    # Queue, never race: firing has no idempotency key.
+    concurrency: { group: routine-fire, cancel-in-progress: false, queue: max }
+    environment: routine-fire
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      # Inputs through env only. No retry: a second fire is a second session.
+      - env:
+          REPO: ${{ inputs.repo }}
+          ISSUE: ${{ inputs.issue }}
+          OPTIONS: ${{ inputs.options }}
+          HEAD_SHA: ${{ inputs.head }}
+          THIS_REPO: ${{ github.repository }}
+          FIRE_URL: ${{ secrets.ROUTINE_FIRE_URL }}
+          FIRE_TOKEN: ${{ secrets.ROUTINE_FIRE_TOKEN }}
+        run: |
+          set -eu
+          RUN_KEY=$(jq -r '.inputs.run_key // ""' "$GITHUB_EVENT_PATH")
+          [ -z "$RUN_KEY" ] || echo "::add-mask::$RUN_KEY"
+          RUN_ID=$(jq -r '.inputs.run_id // ""' "$GITHUB_EVENT_PATH")
+          [ "$REPO" = "$THIS_REPO" ] || exit 1
+          case $ISSUE in ''|0*|*[!0-9]*) exit 1 ;; esac
+          [ "${#OPTIONS}" -le 4000 ] || exit 1
+          [[ $HEAD_SHA =~ ^[0-9a-f]{40}$ ]] || exit 1
+          [ "$HEAD_SHA" = "$GITHUB_SHA" ] || exit 1
+          if [ -z "$RUN_ID" ] && [ -z "$RUN_KEY" ]; then
+            run=null
+          else
+            [[ $RUN_ID =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]] || exit 1
+            [[ $RUN_KEY =~ ^[0-9a-f]{64}$ ]] || exit 1
+            run=$(jq -cn --arg i "$RUN_ID" --arg k "$RUN_KEY" '{id: $i, key: $k}')
+          fi
+          body=$(jq -cn --arg r "$REPO" --arg i "$ISSUE" --argjson o "$OPTIONS" --argjson run "$run" --arg h "$HEAD_SHA" \
+            'if ($o|type) != "object" then error("options") else
+             {text: ({repo: $r, issue: ($i|tonumber), options: $o}
+                     + (if $run == null then {} else {run: $run} end) + {head: $h} | tojson)} end')
+          headers="$RUNNER_TEMP/fire-headers"
+          (umask 077 && printf 'Authorization: Bearer %s\n' "$FIRE_TOKEN" > "$headers")
+          code=$(printf '%s' "$body" | curl -q -sS -o /dev/null -w '%{http_code}' \
+            --max-time 30 -X POST "$FIRE_URL" \
+            -H @"$headers" \
+            -H "anthropic-version: 2023-06-01" \
+            -H "content-type: application/json" --data-binary @-) || true
+          echo "fire: HTTP $code"
+          [ "$code" -ge 200 ] && [ "$code" -lt 300 ]
