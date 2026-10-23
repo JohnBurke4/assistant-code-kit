@@ -169,7 +169,6 @@ as_bot() {
 fill() {
   sed -e "s/\"__OWNER_ID__\"/$OWNER_ID/g" -e "s/\"__APP_BOT_ID__\"/$APP_BOT_ID/g" \
     -e "s/\"__SESSION_BOT_ID__\"/$BOT_ID/g" \
-    -e "s/__APP_BOT_ID__/$APP_BOT_ID/g" -e "s/__APP_SLUG__/$APP_SLUG/g" \
     -e "s/__INTEGRATION__/$INTEGRATION/g" -e "s/__OWNER_LOGIN__/$me_login/g" \
     -e "s/__SESSION_BOT_LOGIN__/$bot_login/g" "$1"
 }
@@ -219,7 +218,6 @@ def norm:
       then .parameters = ({update_allows_fetch_and_merge: false} + (.parameters // {})) else . end)
   else . end;
 def same($w): norm | fit($w) == ($w | fit($w));'
-BRANCH_POLICIES='.branch_policies[] | [.id, (.type // "branch"), .name] | map(tostring) | @tsv'
 
 compare_ruleset() {
   local want
@@ -309,10 +307,10 @@ REPO=$full_name
   die "$REPO's default branch has a name this script doesn't handle."
 if [ "$private" = true ]; then
   [ "$my_plan" != free ] && [ "$my_plan" != null ] ||
-    die "$REPO is private, and private repositories need a paid GitHub plan for rulesets and environments. Make it public, or upgrade."
+    die "$REPO is private, and private repositories need a paid GitHub plan for rulesets. Make it public, or upgrade."
   say "$REPO is private, on your $my_plan plan."
 else
-  say "$REPO is public. Its Actions logs, launch inputs included, are public to anyone signed in to GitHub."
+  say "$REPO is public."
 fi
 [ "$(lower "$INTEGRATION")" != "$(lower "$default_branch")" ] ||
   die "The integration branch can't be $REPO's default branch ($default_branch). Choose another name."
@@ -331,17 +329,14 @@ envs=$(gh api "repos/$REPO/environments?per_page=100" --paginate \
 # A deployment rule the bot can't meet: a literal branch name, none of its own.
 UNSAFE_POLICIES='[.branch_policies[] | select((.type // "branch") != "branch" or (.name | test("[*?\\[\\]{}\\\\]"))
   or (.name | startswith("claude/")) or (.name | startswith("workbench-issue-")))] | length'
-has_routine_env=false
+routine_fire=0
 open_envs=""
 while IFS=$'\t' read -r custom name; do
   [ -n "${name:-}" ] || continue
-  if [ "$name" = routine-fire ]; then
-    has_routine_env=true
-    continue
-  fi
   e=$(urlenc "$name")
   n=$(gh api "repos/$REPO/environments/$e/secrets" --jq .total_count) || die "Couldn't read an environment's secrets."
   [ "$n" != 0 ] || continue
+  [ "$name" != routine-fire ] || routine_fire=$n
   unsafe=1
   if [ "$custom" = true ]; then
     unsafe=$(gh api "repos/$REPO/environments/$e/deployment-branch-policies?per_page=100" --jq "$UNSAFE_POLICIES") ||
@@ -349,6 +344,8 @@ while IFS=$'\t' read -r custom name; do
   fi
   [ "$unsafe" = 0 ] || open_envs="$open_envs $(printf '%s' "$name" | clean | cut -c1-60)"
 done <<<"$envs"
+# An earlier kit's environment: its token is a second copy, one a stolen App key could fire.
+[ "$routine_fire" = 0 ] || die "$REPO's routine-fire environment, from an earlier kit, holds $routine_fire secret(s). The app fires your routine itself now: regenerate the routine's API trigger token in claude.ai (that revokes the copy GitHub holds), paste its URL and the new token into the Assistant app's Settings > Code > Routines, delete routine-fire in Settings > Environments, then run this again."
 [ -z "$open_envs" ] || die "These environments have secrets and a deployment rule a bot branch could meet:$open_envs. Limit each to literal branch names (no patterns, nothing under claude/ or workbench-issue-), then run this again."
 say "No repository secrets, and every environment with secrets is limited to named branches."
 
@@ -357,11 +354,15 @@ say "No repository secrets, and every environment with secrets is limited to nam
 step "4. Workflows the App or a stranger can start"
 g clone --bare --quiet "https://github.com/$REPO.git" "$work/audit.git" || die "Couldn't clone $REPO over https."
 hits=""
+leftovers=""
 while IFS= read -r ref; do
   [ -n "$ref" ] || continue
-  h=$(g -C "$work/audit.git" grep -I -n -E "$AUDIT_RE" "$ref" -- .github/workflows \
-    ':(exclude).github/workflows/workbench-launch.yml' 2>/dev/null) || h=""
+  h=$(g -C "$work/audit.git" grep -I -n -E "$AUDIT_RE" "$ref" -- .github/workflows 2>/dev/null) || h=""
   [ -z "$h" ] || hits="$hits$h"$'\n'
+  # An earlier kit's launch workflow: the app fires the routine itself now.
+  if g -C "$work/audit.git" cat-file -e "$ref:.github/workflows/workbench-launch.yml" 2>/dev/null; then
+    leftovers="$leftovers${ref#refs/*/}"$'\n'
+  fi
 done <<<"$(g -C "$work/audit.git" for-each-ref --format='%(refname)' refs/heads refs/tags)"
 hits=$(printf '%s' "$hits" | clean | cut -c1-200 | awk 'NR <= 200')
 if [ -n "$hits" ]; then
@@ -373,6 +374,11 @@ if [ -n "$hits" ]; then
   left "Check the audit's lines above: each workflow_dispatch or repository_dispatch workflow guards on the actor or is harmless when the App starts it, and each write-all is needed."
 else
   say "No workflow_dispatch, repository_dispatch, pull_request_target, workflow_run, id-token: write or write-all in any workflow."
+fi
+leftovers=$(printf '%s' "$leftovers" | clean | cut -c1-100 | awk 'NR <= 20' | tr '\n' ' ')
+if [ -n "$leftovers" ]; then
+  say "An earlier kit's .github/workflows/workbench-launch.yml is still on: $leftovers"
+  left "Delete .github/workflows/workbench-launch.yml from $leftovers(on $INTEGRATION by a pull request you merge): the app fires your routine itself now. If its token was ever stored in GitHub, regenerate it in claude.ai and paste the new one into the Assistant app's Settings > Code > Routines."
 fi
 
 # ---- 5. What is set up already
@@ -456,17 +462,16 @@ valid_sha "$base_sha" || die "The clone didn't read as expected."
 [ -z "$int_sha" ] || [ "$base_sha" = "$int_sha" ] || die "$INTEGRATION moved while this ran. Run this again."
 t=$work/tree
 for p in .workbench .workbench/agents .workbench/launch.md .workbench/relay.md .workbench/steps.md \
-  .workbench/authors.json .github .github/workflows .github/workflows/workbench-launch.yml .github/CODEOWNERS; do
+  .workbench/authors.json .github .github/CODEOWNERS; do
   [ ! -L "$t/$p" ] || die "$p is a symlink on $base. Replace it with a real file or folder, then run this again."
 done
 if [ ! -e "$t/.github/CODEOWNERS" ] && { [ -e "$t/CODEOWNERS" ] || [ -e "$t/docs/CODEOWNERS" ]; }; then
   die "$REPO's CODEOWNERS isn't in .github/, and a new .github/CODEOWNERS would take its place. Move it to .github/CODEOWNERS, then run this again."
 fi
-mkdir -p "$t/.workbench" "$t/.github/workflows"
+mkdir -p "$t/.workbench" "$t/.github"
 fill "$KIT/files/dot-workbench/launch.md" >"$t/.workbench/launch.md"
 fill "$KIT/files/dot-workbench/relay.md" >"$t/.workbench/relay.md"
 fill "$KIT/files/dot-workbench/authors.json" >"$t/.workbench/authors.json"
-fill "$KIT/files/dot-github/workflows/workbench-launch.yml" >"$t/.github/workflows/workbench-launch.yml"
 # steps.md and the agents are yours after the first run.
 [ -e "$t/.workbench/steps.md" ] || cp "$KIT/files/dot-workbench/steps.md" "$t/.workbench/steps.md"
 if [ ! -e "$t/.workbench/agents" ]; then
@@ -491,27 +496,6 @@ if ! g -C "$t" diff --cached --quiet; then
   # Once D2 holds the integration branch, the kit's changes need a pull request.
   kit_action="pr"
   if [ -z "$int_sha" ] || [ "$rs_d2_action" = create ]; then kit_action=push; fi
-fi
-
-routine_env=keep
-if [ "$has_routine_env" = false ]; then
-  routine_env=create
-else
-  policy=$(gh api "repos/$REPO/environments/routine-fire" \
-    --jq '[.deployment_branch_policy.custom_branch_policies, .deployment_branch_policy.protected_branches] | map(tostring) | @tsv') ||
-    die "Couldn't read routine-fire."
-  branches=$(gh api "repos/$REPO/environments/routine-fire/deployment-branch-policies?per_page=100" \
-    --jq "$BRANCH_POLICIES" 2>/dev/null) || branches=""
-  [ "$policy" = $'true\tfalse' ] && [ "$(printf '%s\n' "$branches" | grep -c .)" = 1 ] &&
-    [ "$(printf '%s' "$branches" | cut -f 2-)" = "branch"$'\t'"$INTEGRATION" ] || routine_env=fix
-fi
-secrets_missing=" ROUTINE_FIRE_TOKEN ROUTINE_FIRE_URL"
-if [ "$has_routine_env" = true ]; then
-  have=$(gh api "repos/$REPO/environments/routine-fire/secrets" --jq '.secrets[].name') || die "Couldn't read routine-fire's secrets."
-  secrets_missing=""
-  for s in ROUTINE_FIRE_TOKEN ROUTINE_FIRE_URL; do
-    printf '%s\n' "$have" | grep -x "$s" >/dev/null || secrets_missing="$secrets_missing $s"
-  done
 fi
 
 # The bot must hold write and no more: an admin passes every ruleset.
@@ -558,7 +542,7 @@ plan_ruleset "$rs_bot_action" bot "your bot creates, updates and deletes only wo
 plan_ruleset "$rs_d3_action" d3 "only repository admins create or delete $INTEGRATION."
 plan_ruleset "$rs_d1_action" d1 "only repository admins (and, at the end, the App) update $INTEGRATION."
 case $kit_action in
-  push) plan "Commit .workbench/, workbench-launch.yml and the CODEOWNERS lines to $INTEGRATION as $me_login:" ;;
+  push) plan "Commit .workbench/ and the CODEOWNERS lines to $INTEGRATION as $me_login:" ;;
   pr) plan "Open a pull request into $INTEGRATION with the kit's changes (D2 needs one), for you to merge:" ;;
 esac
 if [ "$kit_action" != none ]; then
@@ -569,15 +553,10 @@ plan_ruleset "$rs_tags_action" tags "only repository admins create, update or de
 [ "$settings_fix" = false ] || plan "Allow merge commits (the app merges with one)."
 [ "$workflow_fix" = false ] || plan "Make Actions' default token read-only, and stop Actions approving pull requests."
 [ "$fork_fix" = false ] || plan "Require approval for every outside contributor's fork pull request runs."
-case $routine_env in
-  create) plan "Create the routine-fire environment, deployable from $INTEGRATION only." ;;
-  fix) plan "Limit the routine-fire environment to $INTEGRATION only." ;;
-esac
 case $collab_action in
   invite) plan "Invite $bot_login with write, and accept as $bot_login (gh auth switch)." ;;
   accept) plan "Accept the pending invitation as $bot_login (gh auth switch)." ;;
 esac
-[ -z "$secrets_missing" ] || plan "Ask you for routine-fire's secrets:$secrets_missing (gh secret set prompts; nothing is shown)."
 [ "$rs_d1_action" = keep-app ] || plan "Add the Code App to workbench-d1's bypass list, once you've added $REPO to its installation."
 
 if [ "${#plan_lines[@]}" -eq 0 ]; then
@@ -637,7 +616,7 @@ else
       if [ -z "$pr" ]; then
         pr=$(gh api -X POST "repos/$REPO/pulls" -f head="$kit_branch" -f base="$INTEGRATION" \
           -f title="Update the workbench kit" \
-          -f body="From the workbench setup script: the kit's launch core, relay, authors, launch workflow and CODEOWNERS lines." \
+          -f body="From the workbench setup script: the kit's launch core, relay, authors and CODEOWNERS lines." \
           --jq .number) || die "Couldn't open the kit's pull request."
       fi
       valid_id "$pr" || die "GitHub's answer for the kit's pull request didn't read as expected."
@@ -661,30 +640,6 @@ else
     gh api -X PUT "repos/$REPO/actions/permissions/fork-pr-contributor-approval" \
       -f approval_policy=all_external_contributors --silent || die "Couldn't set fork pull request approval."
     say "Fork pull requests: approval required for every outside contributor."
-  fi
-
-  if [ "$routine_env" != keep ]; then
-    printf '{"deployment_branch_policy":{"protected_branches":false,"custom_branch_policies":true}}\n' >"$work/env.json"
-    gh api -X PUT "repos/$REPO/environments/routine-fire" --input "$work/env.json" --silent ||
-      die "Couldn't set up routine-fire."
-    branches=$(gh api "repos/$REPO/environments/routine-fire/deployment-branch-policies?per_page=100" \
-      --jq "$BRANCH_POLICIES") || die "Couldn't read routine-fire's branches."
-    keep_policy=""
-    while IFS=$'\t' read -r pid ptype pname; do
-      [ -n "${pid:-}" ] || continue
-      valid_id "$pid" || die "routine-fire's branch list didn't read as expected."
-      if [ -z "$keep_policy" ] && [ "$ptype" = branch ] && [ "$pname" = "$INTEGRATION" ]; then
-        keep_policy=$pid
-      else
-        gh api -X DELETE "repos/$REPO/environments/routine-fire/deployment-branch-policies/$pid" --silent ||
-          die "Couldn't remove a routine-fire branch rule."
-      fi
-    done <<<"$branches"
-    if [ -z "$keep_policy" ]; then
-      gh api -X POST "repos/$REPO/environments/routine-fire/deployment-branch-policies" \
-        -f name="$INTEGRATION" -f type=branch --silent || die "Couldn't limit routine-fire to $INTEGRATION."
-    fi
-    say "routine-fire: deployable from $INTEGRATION only."
   fi
 
   accept_invite() {
@@ -713,17 +668,7 @@ say "  Environment: your cloud environment, with the ingest host in its allowed 
 say "  Model:       your choice; it is the coordinator's"
 say "  Prompt:"
 fill "$KIT/routine-prompt.txt" | sed 's/^/    /'
-say "  Then add an API trigger: its token and URL are routine-fire's two secrets."
-
-for s in $secrets_missing; do
-  say ""
-  case $s in
-    ROUTINE_FIRE_TOKEN) say "Paste the API trigger's token (shown first) at gh's \"Paste your secret\" prompt. It is hidden as you type." ;;
-    *) say "Now paste the API trigger's URL at gh's \"Paste your secret\" prompt." ;;
-  esac
-  gh secret set "$s" --env routine-fire --repo "$REPO" </dev/tty ||
-    left "Set $s: gh secret set $s --env routine-fire --repo $REPO"
-done
+say "  Then add an API trigger, and paste its URL and token into the Assistant app's Settings > Code > Routines, never into GitHub."
 
 # ---- The App, then the bot ruleset's last exclusion
 

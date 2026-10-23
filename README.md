@@ -53,7 +53,7 @@ The script refuses a repository that isn't on your own personal account, an arch
 
 ### 3. Secrets
 
-The script stops on any Actions or Dependabot repository secret, and on any environment with secrets that a bot branch could deploy from. By hand: Settings › Secrets and variables › Actions and › Dependabot hold no repository secrets (move each into an environment, or delete it); every environment with secrets lists only literal branch names under **Deployment branches and tags** (no patterns, tags or protected-branches rule, and nothing under `claude/` or `workbench-issue-`).
+The script stops on any Actions or Dependabot repository secret, on any environment with secrets that a bot branch could deploy from, and on an earlier kit's `routine-fire` environment with secrets (step 10 says what to do instead). By hand: Settings › Secrets and variables › Actions and › Dependabot hold no repository secrets (move each into an environment, or delete it); every environment with secrets lists only literal branch names under **Deployment branches and tags** (no patterns, tags or protected-branches rule, and nothing under `claude/` or `workbench-issue-`); and no `routine-fire` environment is left from an earlier kit (step 10).
 
 ### 4. The audit
 
@@ -69,9 +69,11 @@ git -C audit.git for-each-ref --format='%(refname)' refs/heads refs/tags |
 
 The App can dispatch any `workflow_dispatch` workflow: each one guards its jobs on the actor (`if: github.triggering_actor == '<you>'`) or is harmless when the App starts it (no secrets, no deploy, no writes).
 
+The script also names each branch or tag that still holds an earlier kit's `.github/workflows/workbench-launch.yml`, and leaves its deletion to you: the app fires your routine itself now. Delete it from `<integration>` by a pull request you merge.
+
 ### 5. The bot ruleset, in its holding form
 
-The script creates it first, leaving out only `workbench-issue-*` and `claude/**`; the integration branch is left out last (step 13). By hand: Settings › Rules › Rulesets › **New branch ruleset**, from `rulesets/bot.json`: `workbench-bot`, **Active**, all branches, excluding `refs/heads/workbench-issue-*` and `refs/heads/claude/**`; **Restrict creations**, **Restrict updates**, **Restrict deletions**; bypass **Repository admin**, **Always**, and each collaborator you exempt.
+The script creates it first, leaving out only `workbench-issue-*` and `claude/**`; the integration branch is left out last (step 12). By hand: Settings › Rules › Rulesets › **New branch ruleset**, from `rulesets/bot.json`: `workbench-bot`, **Active**, all branches, excluding `refs/heads/workbench-issue-*` and `refs/heads/claude/**`; **Restrict creations**, **Restrict updates**, **Restrict deletions**; bypass **Repository admin**, **Always**, and each collaborator you exempt.
 
 It holds everyone without a bypass, GitHub Actions' own token and Dependabot or Renovate branches included: a workflow or tool that pushes a branch or a tag needs another way.
 
@@ -82,14 +84,13 @@ The script creates `<integration>` from `<default>` (an existing branch of that 
 | Ruleset        | Target                     | Rules                                         | Bypass                                            |
 | -------------- | -------------------------- | --------------------------------------------- | ------------------------------------------------- |
 | `workbench-d3` | `refs/heads/<integration>` | Restrict creations and deletions              | Repository admin, Always                          |
-| `workbench-d1` | `refs/heads/<integration>` | Restrict updates (no "allow fetch and merge") | Repository admin, Always; the Code App at step 12 |
+| `workbench-d1` | `refs/heads/<integration>` | Restrict updates (no "allow fetch and merge") | Repository admin, Always; the Code App at step 11 |
 
 ### 7. The files
 
 The script commits them to `<integration>` as you; once D2 exists, it opens a pull request for you to merge instead. By hand, on `<integration>`:
 
 - `files/dot-workbench/` becomes `.workbench/`. In `launch.md` replace `__INTEGRATION__` with `<integration>`. In `authors.json` put your id as `owner_id`, `342955731` (the App's bot) as `app_bot_id`, and your bot's id and login as `session_bot_id` and `session_bot_login`, ids as numbers.
-- `files/dot-github/workflows/workbench-launch.yml` becomes `.github/workflows/workbench-launch.yml`, with `__INTEGRATION__` as `<integration>`, `__APP_BOT_ID__` as `342955731` and `__APP_SLUG__` as `jb-assistant-app-code`.
 - `files/dot-github/CODEOWNERS`'s lines go last in `.github/CODEOWNERS` (created if absent), with `__OWNER_LOGIN__` as your login. If your CODEOWNERS is at the root or in `docs/`, move it to `.github/` first.
 
 `steps.md` and the agents are added only when absent. A renamed integration branch starts from `<default>`, so edits you made to them on the old one don't carry over: bring them across by a pull request.
@@ -109,23 +110,20 @@ Approval of the most recent push stays off, since with 0 approvals GitHub refuse
 
 The script allows merge commits (the app merges with one), makes Actions' default token read-only and unable to approve pull requests, and on a public repository requires approval for every outside contributor's fork pull request runs. By hand: Settings › General › **Allow merge commits**; Settings › Actions › General › **Workflow permissions** and **Approval for running fork pull request workflows from contributors**.
 
-### 10. The environment
+### 10. The bot and the scheduled task
 
-The script creates `routine-fire`, deployable from `<integration>` only. By hand: Settings › Environments › **New environment** › `routine-fire` › **Selected branches and tags** › Ref type **Branch**, `<integration>`.
-
-### 11. The bot and the scheduled task
-
-The script invites your bot with write and accepts as it (`gh auth switch`, and back), prints the scheduled task's settings and saved prompt, then asks for `routine-fire`'s two secrets with `gh secret set`, which prompts and shows nothing. By hand:
+The script invites your bot with write and accepts as it (`gh auth switch`, and back), then prints the scheduled task's settings and saved prompt. The rest is yours, in claude.ai and the Assistant app; nothing about the routine goes into GitHub. By hand:
 
 1. Settings › Collaborators › **Add people** › `<bot>`, with write. Signed in as the bot, accept at `https://github.com/<owner>/<name>/invitations`.
 2. A new **scheduled task** at https://claude.ai/code/routines › **New task** (from claude.ai/code: **Scheduled** › **New task**): repository `<owner>/<name>`, branch `<default>`, your cloud environment, the coordinator's model, and as its saved prompt `routine-prompt.txt` with `__INTEGRATION__` as `<integration>`. Add an **API trigger**.
-3. `routine-fire`'s **Environment secrets:** `ROUTINE_FIRE_TOKEN` and `ROUTINE_FIRE_URL`, the trigger's token (shown first) and URL. Never as repository secrets. Note the token's renewal date.
+3. If the trigger's token was ever stored in GitHub (an earlier kit kept it in a `routine-fire` environment), **regenerate** it in the trigger's settings: regenerating revokes the old copy. Then delete `routine-fire` in Settings › Environments.
+4. In the Assistant app's Settings › Code › Routines, **Add routine** with a name, the trigger's fire URL and its token, and your passkey. The app fires the routine itself when you launch, and never shows the token again. Note the token's renewal date.
 
-### 12. The App
+### 11. The App
 
 The script waits while you add the repository to your installation, then adds the App to D1's bypass list and reads it back. By hand: `https://github.com/settings/installations/<installation id>` › **Only select repositories** › add `<owner>/<name>` › **Save**; then `workbench-d1` › **Add bypass** › `jb-assistant-app-code`, **Always**.
 
-### 13. The bot ruleset's last exclusion
+### 12. The bot ruleset's last exclusion
 
 The script adds `refs/heads/<integration>` to `workbench-bot`'s exclusions, now that D1 and D3 hold the branch. When every repository is set up, sign the bot out of `gh`: `gh auth logout -h github.com -u <bot>`.
 
@@ -136,7 +134,7 @@ The repository shows in Code's sidebar, and its setup status in the Assistant ap
 ## Known limits
 
 - **Every cloud session you start acts as your bot,** not only launches.
-- **On a public repository** the issue number and your launch options, free text included, show in the `workbench-launch` run's log; strangers' comments can reach a session, which treats them as data only; and the bot can approve strangers' fork runs, which get no secrets.
+- **On a public repository** strangers' comments can reach a session, which treats them as data only, and the bot can approve strangers' fork runs, which get no secrets.
 - **A stolen App key** meets Code Owners review only on `.workbench/`, CODEOWNERS and the boot files: it could still merge other pull requests into your integration branch with green checks.
 - **The setup line's kit repository and commit come from the app,** so a compromised app could show another: compare the repository and commit with the kit repository's own history on GitHub.
 - **Repository secrets added after setup** reach push-triggered workflows on bot branches. Run the script again after adding one.
