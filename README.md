@@ -35,24 +35,25 @@ A small text app for macOS (Apple silicon), Windows (x64) and Linux (x64), downl
 
 In Settings › Code › GitHub, under **Setup app**, download it for your computer. Settings shows each download's SHA-256 and the release it comes from. Before opening it:
 
-- **macOS** (`assistant-setup-macos-arm64.zip`): double-click the zip to unpack `assistant-setup`, then in Terminal, in that folder:
+- **macOS** (`assistant-setup-macos-arm64.zip`): Safari unpacks it to `Workbench Setup.app` (and may move the zip to the Bin: take it back to check its SHA-256); otherwise, double-click the zip. To check it (optional), in Terminal, in that folder:
 
   ```sh
-  codesign -dv --verbose=2 assistant-setup
+  codesign -dv --verbose=2 "Workbench Setup.app"
+  spctl -a -vv "Workbench Setup.app"
   ```
 
-  It must show `Authority=Developer ID Application: … (BMXVW9JNQ9)` and `TeamIdentifier=BMXVW9JNQ9`. macOS checks the notarization online when you first open it, since a bare program can't carry its ticket.
+  `codesign` must show `Authority=Developer ID Application: … (BMXVW9JNQ9)` and `TeamIdentifier=BMXVW9JNQ9`, and `spctl` must show `source=Notarized Developer ID`.
 
 - **Windows** (`assistant-setup-windows-x64.exe`): right-click it › **Properties** › **Digital Signatures**. The signer must be `__WINDOWS_PUBLISHER__`, with a timestamp. A tab that is missing means it is unsigned: don't run it.
 - **The SHA-256** of the file you downloaded (the zip, the `.exe` or the `.tar.gz`) must match the one Settings shows: `shasum -a 256 <file>` on macOS, `sha256sum <file>` on Linux, `Get-FileHash <file>` in PowerShell. It must also match `SHA256SUMS.txt` on the kit repository's release that Settings names, on GitHub, reached by typing the kit repository's name rather than by a link. Its releases can't be changed once published.
 
 ### Open it
 
-- **macOS:** double-click `assistant-setup`. It opens in Terminal. macOS asks once whether to open a program downloaded from the internet: choose **Open**.
+- **macOS:** double-click **Workbench Setup**. The first time, macOS asks whether to open an app downloaded from the internet: choose **Open**. The wizard opens in Terminal. If Terminal doesn't open, a dialog gives the command to run in Terminal instead, from the folder that holds Workbench Setup. Delete the app when you're done.
 - **Windows:** double-click the `.exe`. SmartScreen may warn while the signing certificate is new and has no reputation yet: **More info** names the publisher; choose **Run anyway** only if it is `__WINDOWS_PUBLISHER__`.
 - **Linux:** in a terminal, `tar -xzf assistant-setup-linux-x64.tar.gz`, then `./assistant-setup`.
 
-Run it from an ordinary terminal session, not one with unusual environment variables set. With no terminal it stops before reading anything.
+Run it from an ordinary terminal session, not one with unusual environment variables set. With no terminal it stops before reading anything (the macOS app opens Terminal itself).
 
 ### What it does
 
