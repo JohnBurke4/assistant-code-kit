@@ -1,6 +1,6 @@
 # Relay
 
-How a launched session sends its short structured updates to the app's run page: one `curl` POST per event to the relay ingest's MCP endpoint, by the script below. Only for a session started by the launch routine, after `.workbench/launch.md`'s step 1 passed. Nothing goes on GitHub: never post an event as a comment, by `gh api` or any other way.
+How a launched session sends its short structured updates to the app's run page: one `curl` POST per event to the relay ingest's MCP endpoint, by the script below. Only for a session started by the launch routine, after `.workbench/launch.md`'s step 1, or `.workbench/price.md`'s step 1, passed. Nothing goes on GitHub: never post an event as a comment, by `gh api` or any other way.
 
 The relay token is not in this session and never is: the cloud environment's Network secret, bound to the ingest host alone, adds it on the way out. Never add an `Authorization` header, and never look for the token.
 
@@ -12,7 +12,7 @@ Write the event with your Write tool to `/tmp/assistant-launch/event.json`, as a
 - `link` only where the table allows it; `pr` as a number, only where the table allows it;
 - `summary` as the rules below say.
 
-The run's id and key are not in it: the script adds them from `/tmp/assistant-launch/run.json`, which `launch.md`'s step 1 wrote once the payload passed. They never go into a command, a file you write, a summary or the chat. Without `run.json`, send nothing.
+The run's id and key are not in it: the script adds them from `/tmp/assistant-launch/run.json`, which `launch.md`'s step 1 (or, for a price check, `price.md`'s step 1) wrote once the payload passed. They never go into a command, a file you write, a summary or the chat. Without `run.json`, send nothing.
 
 ## Events
 
@@ -35,6 +35,7 @@ The run's id and key are not in it: the script adds them from `/tmp/assistant-la
 - The summary is plain text, 1 to 1,000 characters, in your own words: no Markdown, HTML or URLs, no `<`, no secrets, tokens or environment values, and no quoted issue or comment text.
 - For `stages`, the summary is the stages in order, one per line: 2 to 10 lines, each 1 to 60 characters with something visible. For `stage`, it starts with the stage's number in that list and `. `, then what the stage is doing. Send `stages` again if the stages change (it clears the marks), then `stage_done` for each stage already finished and `stage` for the one in progress.
 - For `stage_done`, the summary has the `stage` grammar: the stage's number in that list and `. `, then what was finished.
+- For a price check's `done`, the summary is the estimate as one line of JSON, which `price.md`'s answer check writes.
 
 Examples of `event.json`:
 
@@ -105,4 +106,4 @@ say(field ? "Refused " + field : "Not recorded.");
 1. Count your events, resends included. Send at most 50, keeping the last of them for `done` or `failed`; after the 50th, send no more.
 2. `Recorded.` means the event landed.
 3. `Refused <field>` names a field (`run_id`, `run_key`, `event`, `link`, `pr`, `summary` or `arguments`) whose rule the event broke, and nothing was recorded. Write that event once more, corrected: leave `link` or `pr` out rather than invent one, and rewrite the summary in your own words. If the resend is refused too, go on as in 4. `started` is the exception: it is never resent.
-4. Anything else (`Not recorded.`, the host unreachable, a timeout): carry on with the work, silently. Never resend, since a resend can record an event twice, and never fall back to a GitHub comment or any other way of sending it. The one exception is `started`: `launch.md`'s step 4 stops the session unless it printed `Recorded.`.
+4. Anything else (`Not recorded.`, the host unreachable, a timeout): carry on with the work, silently. Never resend, since a resend can record an event twice, and never fall back to a GitHub comment or any other way of sending it. The one exception is `started`: `launch.md`'s step 4 (for a price check, `price.md`'s step 2) stops the session unless it printed `Recorded.`.
