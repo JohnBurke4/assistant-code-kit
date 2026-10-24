@@ -35,11 +35,11 @@ A small text app for macOS (Apple silicon), Windows (x64) and Linux (x64), downl
 
 In Settings › Code › GitHub, under **Setup app**, download it for your computer. Settings shows each download's SHA-256 and the release it comes from. Before opening it:
 
-- **macOS** (`assistant-setup-macos-arm64.zip`): Safari unpacks it to `Workbench Setup.app` (and may move the zip to the Bin: take it back to check its SHA-256); otherwise, double-click the zip. To check it (optional), in Terminal, in that folder:
+- **macOS** (`assistant-setup-macos-arm64.zip`): Safari unpacks it to `Thistlewick Setup.app` (and may move the zip to the Bin: take it back to check its SHA-256); otherwise, double-click the zip. To check it (optional), in Terminal, in that folder:
 
   ```sh
-  codesign -dv --verbose=2 "Workbench Setup.app"
-  spctl -a -vv "Workbench Setup.app"
+  codesign -dv --verbose=2 "Thistlewick Setup.app"
+  spctl -a -vv "Thistlewick Setup.app"
   ```
 
   `codesign` must show `Authority=Developer ID Application: … (BMXVW9JNQ9)` and `TeamIdentifier=BMXVW9JNQ9`, and `spctl` must show `source=Notarized Developer ID`.
@@ -49,7 +49,7 @@ In Settings › Code › GitHub, under **Setup app**, download it for your compu
 
 ### Open it
 
-- **macOS:** double-click **Workbench Setup**. The first time, macOS asks whether to open an app downloaded from the internet: choose **Open**. The wizard opens in Terminal. If Terminal doesn't open, a dialog gives the command to run in Terminal instead, from the folder that holds Workbench Setup. Delete the app when you're done.
+- **macOS:** double-click **Thistlewick Setup**. The first time, macOS asks whether to open an app downloaded from the internet: choose **Open**. The wizard opens in Terminal. If Terminal doesn't open, a dialog gives the command to run in Terminal instead, from the folder that holds Thistlewick Setup. Delete the app when you're done.
 - **Windows:** double-click the `.exe`. SmartScreen may warn while the signing certificate is new and has no reputation yet: **More info** names the publisher; choose **Run anyway** only if it is `__WINDOWS_PUBLISHER__`.
 - **Linux:** in a terminal, `tar -xzf assistant-setup-linux-x64.tar.gz`, then `./assistant-setup`.
 
@@ -57,32 +57,35 @@ Run it from an ordinary terminal session, not one with unusual environment varia
 
 ### What it does
 
-In this order, saying what it found at each step:
+In this order, one step to a screen, saying what it found at each step. Questions that change something take a letter then Enter, and Enter alone means No.
 
-1. **The setup code.** Paste the setup code from Settings › Code › GitHub (**Copy**). It holds your GitHub id, your bot's, your App installation's and your integration branch's name, nothing secret. The app shows them back.
+1. **The setup code.** Paste the setup code from Settings › Code › GitHub (**Copy**). It holds your GitHub id, your bot's, your App installation's and your integration branch's name, nothing secret. The app shows the integration branch back when you choose a repository.
 2. **Tools.** It finds Claude Code, or offers to install it with Claude Code's official installer from claude.ai (no admin rights). It finds the GitHub CLI (`gh`) 2.40 or later, or offers to download gh for this run only, checked against the SHA-256 the app holds and deleted at the end. Your own `gh` and its sign-ins are never touched: the app uses a copy, with its own empty settings.
-3. **Sign in as your bot.** Open a private window, sign in to GitHub there as the bot, go to `https://github.com/login/device` and enter the code the app shows. It checks the account is the bot the setup code names, with `repo` and none of `workflow`, `admin:*` or `delete_repo`.
-4. **Connect the cloud as your bot.** Press Enter and Claude Code starts in the app's own empty folder, signed in to GitHub as the bot. If it asks whether to trust the folder, choose **Yes**. If it asks, type `/login` and sign in with your claude.ai account. Type `/web-setup` and choose **Replace connection**; it warns there is no `workflow` scope, which is intended. Check it says it is connected as your bot, type `/exit`, and answer `y`.
-5. **Sign in as you.** Your browser opens `https://github.com/login/device`; enter the code the app shows, signed in as yourself. It checks the account is the setup code's owner, a personal account, with `repo`, `workflow` and `read:user`.
-6. **Which repository?** It lists your own repositories that aren't archived; type a number. Then type the checks D2 should require, comma-separated, or press Enter for none (with none, green means no failed or pending GitHub Actions run).
-7. **The repository.** It reads everything first: the repository, its secrets, the audit and what is set up already (appendix, steps 2 to 4), and stops there, before any change, on anything it refuses. Then it lists every change it plans and asks once, `Continue? [y/N]`. A step already done is skipped, and a ruleset of ours that differs from the kit's is replaced in place. If nothing is left, it says so and asks nothing.
-8. **The writes,** in the appendix's order: the bot ruleset in its holding form, the integration branch, D3, D1, the files (or a pull request for you to merge, once D2 exists), D2, the tag ruleset, the settings, then the invitation, which it accepts as the bot.
-9. **The scheduled task.** It prints the task's settings and its saved prompt, for [the claude.ai side](#the-claudeai-side).
-10. **The Code App.** Your browser opens your App installation's page: **Only select repositories**, add the repository, **Save**, then press Enter. It adds the App to D1's bypass list and reads it back, then leaves the integration branch out of the bot ruleset.
-11. **Check.** It reads every item again from GitHub and marks each ✓ or ✗, then lists what is left.
-12. **Set up another repository?** `y` goes back to step 6. At the end it deletes the run's folder, its sign-ins and any download, and waits for Enter.
+3. **Sign in as your bot.** Open a private window, sign in to GitHub there as the bot, go to `https://github.com/login/device` and enter the code the app shows. It checks the account is the bot the setup code names, with `repo` and none of `workflow`, `admin:*` or `delete_repo`. If it isn't, that sign-in is removed from this computer and the app offers to try it again, up to 3 times.
+4. **Connect the cloud as your bot.** The app first warns that this makes your bot the GitHub author of all your claude.ai cloud sessions, including those you start outside Thistlewick; `y` then Enter goes on, Enter alone or `n` stops setup, and any other answer is asked again. Claude Code then starts in the app's own empty folder, signed in to GitHub as the bot. If it asks whether to trust the folder, choose **Yes**. If it asks, type `/login` and sign in with your claude.ai account. Type `/web-setup` and choose **Replace connection**; it warns there is no `workflow` scope, which is intended. Check it says it is connected as your bot, type `/exit`, and confirm in the app that it did. If Claude Code stops with an error, the app offers to open it again.
+5. **Sign in as you.** Your browser opens `https://github.com/login/device`; enter the code the app shows, signed in as yourself. It checks the account is the setup code's owner, a personal account, with `repo`, `workflow` and `read:user`, and offers a retry as in step 3.
+6. **Which repository?** It lists your own repositories that aren't archived. Type part of a name or URL to filter the list, choose with the arrow keys and press Enter (in a terminal that can't take keys one at a time, type a number).
+7. **The repository.** It reads everything first: the repository, its secrets, the audit and what is set up already (appendix, steps 2 to 4), and stops there, before any change, on anything it refuses, then goes back to step 6. A repository with no commits yet needs one: once the secrets and environment checks pass, the app offers to add a first commit, a `README.md` on the repository's default branch, and shows the file, message and branch first. It never replaces a file: if someone committed meanwhile, it writes nothing and carries on. Once it has made that commit, a problem found later in the rules ends the run instead of going back to step 6, since something was written.
+8. **Checks.** Choose the checks D2 should require. Checks D2 already requires stay ticked and can't be removed (setup stops instead if one can't be read, or comes from anything but GitHub Actions). Checks GitHub Actions ran on the default branch's latest commit are suggested, unticked: add only checks that run on pull requests into the integration branch, or merges wait for them. **A** adds names by hand. With none, the app asks you to confirm; then green means no failed or pending GitHub Actions run.
+9. **Review.** A summary of the changes, with any warnings (the integration branch may hold commits no one reviewed, a ruleset of ours that differs from the kit's is replaced in place, a setup pull request waiting); **D** shows the exact list, and Esc goes back to the checks. It asks once, `Apply these changes? [y/N]`. A step already done is skipped. If nothing is left, it says the repository is already configured, asks nothing and goes on to the check.
+10. **The writes,** in the appendix's order, a line and a count for each: the bot ruleset in its holding form, the integration branch, D3, D1, the files (or a pull request for you to merge, once D2 exists), D2, the tag ruleset, the settings, then the invitation, which it accepts as the bot.
+11. **The Code App.** Your browser opens your App installation's page: **Only select repositories**, add the repository, **Save**, then press Enter. It adds the App to D1's bypass list and reads it back; if it isn't saved yet, press Enter again (up to 3 tries). Then it leaves the integration branch out of the bot ruleset.
+12. **Check.** It reads every item again from GitHub and marks each verified, failed, or not verifiable from here (which repositories your App installation selects), then lists what is left, and points to Settings › Routines (for an owner, Settings › Code › Routines) as where to finish connecting Claude ([the claude.ai side](#the-claudeai-side)).
+13. **Set up another repository?** **R** goes back to step 6, without signing in again; Enter finishes. At the end it deletes the run's folder, its sign-ins and any download.
 
 Press Ctrl-C, or close the window, to stop at any time (while Claude Code runs, Ctrl-C is Claude Code's). A stop says whether anything was changed; run it again and it picks up where it stopped.
 
 ### What it can't do
 
 - Make your bot's account (GitHub's terms).
-- Set up your claude.ai environment or scheduled task, or Add routine in the Assistant app: they have no API it can use. It prints what they need.
+- Set up your claude.ai environment or scheduled task, or Add routine in the Assistant app: they have no API it can use. The routines guide in Settings › Code › Routines takes you through them.
+- See which repositories your App installation selects: a `gh` token can't read it, so its check says so. Check it on the installation's page.
+- Run with its output redirected: it needs a terminal for both what you type and what it shows.
 
 ## The claude.ai side
 
 1. **A claude.ai cloud environment** for your scheduled tasks: the relay ingest host (`taskmanager-ingest-972519281630.europe-west1.run.app`) in its allowed domains, and a relay token from Settings › Code › Relay tokens as a Network secret bound to that host only, pasted exactly as the app shows it once; claude.ai adds `Bearer` itself. One environment and its relay token serve every repository's routine. The token never enters a session: the proxy adds it.
-2. **A scheduled task** per repository at https://claude.ai/code/routines › **New task** (from claude.ai/code: **Scheduled** › **New task**), with what the setup app printed: the repository, its default branch, your cloud environment, the coordinator's model, and the saved prompt. Add an **API trigger**. Nothing about the routine goes into GitHub.
+2. **A scheduled task** per repository at https://claude.ai/code/routines › **New task** (from claude.ai/code: **Scheduled** › **New task**), as the guide under the repository in the Assistant app's Settings › Code › Routines says (it is open while the repository has no routine): the repository, starting from its default branch (never a `claude/` or `workbench-issue-` branch), your cloud environment, a model of your choice (the coordinator's), and the prompt the guide shows, filled for your integration branch (**Copy**). Check the pasted prompt holds its `git fetch` and `git rev-parse` commands: they are the routine's check that a launch is at the integration branch's tip. Add an **API trigger**. Nothing about the routine goes into GitHub.
 3. **Add routine** in the Assistant app's Settings › Code › Routines, under the repository, with a name, the trigger's fire URL and its token, and your passkey. The app fires the routine itself when you launch, and never shows the token again. If the repository has several routines, **Make default** on the one a launch should preselect. Note the token's renewal date.
 
 ## Check in the app
@@ -175,10 +178,10 @@ The app allows merge commits (the app merges with one), makes Actions' default t
 
 ### 10. The bot and the scheduled task
 
-The app invites your bot with write and accepts the invitation as the bot, with the bot's own sign-in; if that fails, it says so, and you accept by hand. Then it prints the scheduled task's settings and saved prompt. By hand:
+The app invites your bot with write and accepts the invitation as the bot, with the bot's own sign-in; if that fails, it says so, and you accept by hand. It leaves the scheduled task to you: its last screen points to Settings › Routines (for an owner, Settings › Code › Routines), whose guide gives the task's settings and prompt. By hand:
 
 1. Settings › Collaborators › **Add people** › `<bot>`, with write. In a private window signed in as the bot, accept at `https://github.com/<owner>/<name>/invitations`.
-2. The scheduled task and Add routine: [the claude.ai side](#the-claudeai-side), steps 2 and 3. Its saved prompt is `routine-prompt.txt` with `__INTEGRATION__` as `<integration>`.
+2. The scheduled task and Add routine: [the claude.ai side](#the-claudeai-side), steps 2 and 3. Its saved prompt is the one the guide shows under the repository, filled for `<integration>`.
 
 ### 11. The App
 
