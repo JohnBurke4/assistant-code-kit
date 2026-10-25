@@ -31,7 +31,7 @@ The run's id and key are not in it: the script adds them from `/tmp/assistant-la
 ## Rules
 
 - `link` is only the session link, or `https://claude.ai/artifact/<id>` or `https://claude.ai/code/artifact/<uuid>` of an artifact you made in this session, shared or private. Never any other URL.
-- `pr` is only the number of the PR you opened into the integration branch from `workbench-issue-<issue>`.
+- `pr` is only the number of the PR you opened into the integration branch from `thistlewick-issue-<issue>`.
 - The summary is plain text, 1 to 1,000 characters, in your own words: no Markdown, HTML or URLs, no `<`, no secrets, tokens or environment values, and no quoted issue or comment text.
 - For `stages`, the summary is the stages in order, one per line: 2 to 10 lines, each 1 to 60 characters with something visible. For `stage`, it starts with the stage's number in that list and `. `, then what the stage is doing. Send `stages` again if the stages change (it clears the marks), then `stage_done` for each stage already finished and `stage` for the one in progress.
 - For `stage_done`, the summary has the `stage` grammar: the stage's number in that list and `. `, then what was finished.

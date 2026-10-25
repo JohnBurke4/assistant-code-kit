@@ -73,7 +73,7 @@ if (typeof p.head !== "string" || !/^[0-9a-f]{40}$/.test(p.head)) fail("head");
 let root;
 try { root = git(["rev-parse", "--show-toplevel"]); } catch { fail("root"); }
 const low = INTEGRATION.toLowerCase();
-if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/.test(INTEGRATION) || low.startsWith("workbench-issue-") || low === "claude" || low === "head" || INTEGRATION.includes("..") || INTEGRATION.endsWith(".") || INTEGRATION.endsWith(".lock")) fail("integration");
+if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/.test(INTEGRATION) || low.startsWith("thistlewick-issue-") || low.startsWith("workbench-issue-") || low === "claude" || low === "head" || low.endsWith("_head") || INTEGRATION.includes("..") || INTEGRATION.endsWith(".") || INTEGRATION.endsWith(".lock")) fail("integration");
 if (typeof p.repo !== "string" || p.repo.length > 140 || !FULL.test(p.repo)) fail("repo");
 let origin;
 try { origin = git(["remote", "get-url", "origin"]); } catch { fail("origin"); }
@@ -302,16 +302,16 @@ Progress reporting (step 8) is part of every run, whatever is ticked.
   . /tmp/assistant-launch/author.env && git config user.name "$BOT_LOGIN" && git config user.email "$BOT_EMAIL"
   ```
 
-- Branch `workbench-issue-<issue>` from the approved commit. First check the branch isn't on `origin`:
+- Branch `thistlewick-issue-<issue>` from the approved commit. First check the branch isn't on `origin`:
 
   ```sh
-  . /tmp/assistant-launch/checked.env && git ls-remote --heads origin "workbench-issue-$ISSUE"
+  . /tmp/assistant-launch/checked.env && git ls-remote --heads origin "thistlewick-issue-$ISSUE"
   ```
 
   If `ls-remote` prints a line, the branch already exists on `origin`: do not touch it, ask the owner in the session, relay `question`, and wait. Otherwise:
 
   ```sh
-  . /tmp/assistant-launch/checked.env && git switch -c "workbench-issue-$ISSUE" "$HEAD_SHA"
+  . /tmp/assistant-launch/checked.env && git switch -c "thistlewick-issue-$ISSUE" "$HEAD_SHA"
   ```
 
   Push only that branch, and never force-push.
@@ -319,7 +319,7 @@ Progress reporting (step 8) is part of every run, whatever is ticked.
 - Open the PR into the integration branch over REST. Write its title and body to files with your Write tool (never type issue text into a command), then:
 
   ```sh
-  . /tmp/assistant-launch/checked.env && gh api "repos/$REPO/pulls" -X POST -f head="workbench-issue-$ISSUE" -f base="$INTEGRATION" -F title=@/tmp/assistant-launch/pr-title.txt -F body=@/tmp/assistant-launch/pr-body.md --jq .number
+  . /tmp/assistant-launch/checked.env && gh api "repos/$REPO/pulls" -X POST -f head="thistlewick-issue-$ISSUE" -f base="$INTEGRATION" -F title=@/tmp/assistant-launch/pr-title.txt -F body=@/tmp/assistant-launch/pr-body.md --jq .number
   ```
 
 - Never dispatch a workflow, approve a review, merge a PR, push to the integration branch or the default branch, force-push, or post, edit or delete a comment.

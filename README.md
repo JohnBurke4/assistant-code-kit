@@ -4,10 +4,10 @@ How to bring one of your GitHub repositories onto Code's workbench lane. The set
 
 ## How the lane works
 
-- **The integration branch** (`workbench` unless you rename it in the Assistant app's Settings › Code › GitHub) is the lane's: sessions open pull requests into it, and the app merges them there with your passkey. It is never your default branch. You merge it into your own branches whenever you like.
+- **The integration branch** (`thistlewick` unless you rename it in the Assistant app's Settings › Code › GitHub; an account connected earlier keeps `workbench`) is the lane's: sessions open pull requests into it, and the app merges them there with your passkey. It is never your default branch. You merge it into your own branches whenever you like.
 - **`.workbench/` on the integration branch** holds what a launched session follows: `launch.md` (the launch core), `relay.md` (how it reports to the app), `price.md` (a price check, kept exactly as the kit holds it: the app checks it is that file), `steps.md` (the launch ticks), `agents/*.md` (the roles a launch can spawn: `planner`, `implementer`, `security-reviewer`, `validity-reviewer` and `simplicity-reviewer`) and `authors.json`. A session reads them at the integration branch's tip, which must be the commit your passkey approved. `steps.md` and the agents are yours to change, by a pull request with your review.
 - **The scheduled task runs on your default branch,** so your own `.claude/` and `CLAUDE.md` load first, as always.
-- **Your session bot** pushes only `workbench-issue-<n>` (a launch's branch) and `claude/**` (your ordinary cloud sessions). A ruleset holds it off every other branch and every tag.
+- **Your session bot** pushes only `thistlewick-issue-<n>` (a launch's branch) and `claude/**` (your ordinary cloud sessions). A ruleset holds it off every other branch and every tag.
 - **Code Owners review:** a pull request into the integration branch that changes `.workbench/`, `.github/CODEOWNERS` or a session's boot files (`CLAUDE.md`, `CLAUDE.local.md`, `.claude/`, `.mcp.json`, at any depth) needs your review on GitHub, whoever opens it.
 
 ## The setup app
@@ -85,7 +85,7 @@ Press Ctrl-C, or close the window, to stop at any time (while Claude Code runs, 
 ## The claude.ai side
 
 1. **A claude.ai cloud environment** for your scheduled tasks: the relay ingest host (`taskmanager-ingest-972519281630.europe-west1.run.app`) in its allowed domains, and a relay token from Settings › Code › Relay tokens as a Network secret bound to that host only, pasted exactly as the app shows it once; claude.ai adds `Bearer` itself. One environment and its relay token serve every repository's routine. The token never enters a session: the proxy adds it.
-2. **A scheduled task** per repository at https://claude.ai/code/routines › **New task** (from claude.ai/code: **Scheduled** › **New task**), as the guide under the repository in the Assistant app's Settings › Code › Routines says (it is open while the repository has no routine): the repository, starting from its default branch (never a `claude/` or `workbench-issue-` branch), your cloud environment, a model of your choice (the coordinator's), and the prompt the guide shows, filled for your integration branch (**Copy**). Check the pasted prompt holds its `git fetch` and `git rev-parse` commands: they are the routine's check that a launch is at the integration branch's tip. Add an **API trigger**. Nothing about the routine goes into GitHub.
+2. **A scheduled task** per repository at https://claude.ai/code/routines › **New task** (from claude.ai/code: **Scheduled** › **New task**), as the guide under the repository in the Assistant app's Settings › Code › Routines says (it is open while the repository has no routine): the repository, starting from its default branch (never a `claude/` or `thistlewick-issue-` branch), your cloud environment, a model of your choice (the coordinator's), and the prompt the guide shows, filled for your integration branch (**Copy**). Check the pasted prompt holds its `git fetch` and `git rev-parse` commands: they are the routine's check that a launch is at the integration branch's tip. Add an **API trigger**. Nothing about the routine goes into GitHub.
 3. **Add routine** in the Assistant app's Settings › Code › Routines, under the repository, with a name, the trigger's fire URL and its token, and your passkey. The app fires the routine itself when you launch, and never shows the token again. If the repository has several routines, **Make default** on the one a launch should preselect. Note the token's renewal date.
 
 ## Check in the app
@@ -119,7 +119,7 @@ The app refuses a repository that isn't on your own personal account, an archive
 
 ### 3. Secrets
 
-The app stops on any Actions or Dependabot repository secret, on any environment with secrets that a bot branch could deploy from, and on an earlier kit's `routine-fire` environment with secrets ([Coming from an earlier kit](#coming-from-an-earlier-kit)). By hand: Settings › Secrets and variables › Actions and › Dependabot hold no repository secrets (move each into an environment, or delete it); every environment with secrets lists only literal branch names under **Deployment branches and tags** (no patterns, tags or protected-branches rule, and nothing under `claude/` or `workbench-issue-`); and no `routine-fire` environment is left from an earlier kit.
+The app stops on any Actions or Dependabot repository secret, on any environment with secrets that a bot branch could deploy from, and on an earlier kit's `routine-fire` environment with secrets ([Coming from an earlier kit](#coming-from-an-earlier-kit)). By hand: Settings › Secrets and variables › Actions and › Dependabot hold no repository secrets (move each into an environment, or delete it); every environment with secrets lists only literal branch names under **Deployment branches and tags** (no patterns, tags or protected-branches rule, and nothing under `claude/` or `thistlewick-issue-`); and no `routine-fire` environment is left from an earlier kit.
 
 ### 4. The audit
 
@@ -139,7 +139,7 @@ The app also names each branch or tag that still holds an earlier kit's `.github
 
 ### 5. The bot ruleset, in its holding form
 
-The app creates it first, leaving out only `workbench-issue-*` and `claude/**`; the integration branch is left out last (step 12). By hand: Settings › Rules › Rulesets › **New branch ruleset**, from `rulesets/bot.json`: `workbench-bot`, **Active**, all branches, excluding `refs/heads/workbench-issue-*` and `refs/heads/claude/**`; **Restrict creations**, **Restrict updates**, **Restrict deletions**; bypass **Repository admin**, **Always**.
+The app creates it first, leaving out only `thistlewick-issue-*` and `claude/**`; the integration branch is left out last (step 12). By hand: Settings › Rules › Rulesets › **New branch ruleset**, from `rulesets/bot.json`: `workbench-bot`, **Active**, all branches, excluding `refs/heads/thistlewick-issue-*` and `refs/heads/claude/**`; **Restrict creations**, **Restrict updates**, **Restrict deletions**; bypass **Repository admin**, **Always**.
 
 It holds everyone without a bypass, GitHub Actions' own token and Dependabot or Renovate branches included: a workflow or tool that pushes a branch or a tag needs another way. To let a collaborator of yours through, add them to `workbench-bot`'s bypass list by hand. The app never adds one, and a later run replaces the ruleset with the kit's form, which drops them: add them again after each run.
 
@@ -194,6 +194,7 @@ The app adds `refs/heads/<integration>` to `workbench-bot`'s exclusions, now tha
 ## Coming from an earlier kit
 
 - **`routine-fire`:** if the routine's trigger token was ever stored in GitHub (an earlier kit kept it in a `routine-fire` environment), **regenerate** it in the trigger's settings on claude.ai: regenerating revokes the old copy. Paste the new one into Settings › Code › Routines, then delete `routine-fire` in Settings › Environments.
+- **`workbench-issue-` branches:** a launch now works on `thistlewick-issue-<n>`, and the app no longer reads a pull request from `workbench-issue-<n>` as a session's. Before your next launch, run the setup app (`setup-v4` or later) again on each repository and merge the setup pull request it opens: it moves the bot ruleset's exclusion and `.workbench/` to the new name.
 - **`workbench-launch.yml`:** delete `.github/workflows/workbench-launch.yml` from each branch or tag the app names, on `<integration>` by a pull request you merge: the app fires your routine itself now.
 
 ## Known limits
